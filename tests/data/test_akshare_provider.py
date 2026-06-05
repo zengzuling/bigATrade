@@ -71,6 +71,21 @@ def test_filter_supported_stock_codes_keeps_six_digit_a_share_codes():
     assert [stock.code for stock in result] == ["000001", "600000"]
 
 
+def test_normalize_stock_list_strips_sh_and_sz_prefixes():
+    """东方财富快照返回 sz/sh 前缀时，应转为六位股票代码。"""
+    raw = pd.DataFrame(
+        {
+            "代码": ["sz000001", "sh600000", "bj920000"],
+            "名称": ["平安银行", "浦发银行", "北交所样本"],
+            "最新价": [11.0, 10.0, 13.0],
+        }
+    )
+
+    result = filter_supported_stock_codes(normalize_stock_list(raw))
+
+    assert [stock.code for stock in result] == ["000001", "600000"]
+
+
 def test_normalize_daily_bars_maps_akshare_columns_and_sorts_by_date():
     """日线行情应统一列名并按日期升序排列，供指标和回测复用。"""
     raw = pd.DataFrame(

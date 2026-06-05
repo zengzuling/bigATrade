@@ -131,7 +131,9 @@ def _optional_existing_column(raw: pd.DataFrame, candidates: list[str]) -> str |
 
 def _normalize_stock_code(value: object) -> str:
     """规范化 AkShare 股票代码，保留北交所 bj 前缀。"""
-    code = str(value)
+    code = str(value).lower()
+    if code.startswith(("sz", "sh")) and len(code) >= 8:
+        return code[-6:]
     if code.lower().startswith("bj"):
         return code.lower()
     return code.zfill(6)
