@@ -7,7 +7,7 @@ from typing import Protocol
 import pandas as pd
 
 from bigatrade.data.models import StockInfo
-from bigatrade.strategy.strong_stock import score_latest_stock
+from bigatrade.strategy.strong_stock import is_risky_stock_name, score_latest_stock
 from bigatrade.strategy.trade_plan import TradePlan, build_trade_plan
 
 
@@ -36,6 +36,8 @@ class RecommendationService:
             stocks = stocks[:scan_limit]
 
         for stock in stocks:
+            if is_risky_stock_name(stock.name):
+                continue
             try:
                 bars = self._provider.daily_bars(stock.code, start_date, date)
             except Exception:

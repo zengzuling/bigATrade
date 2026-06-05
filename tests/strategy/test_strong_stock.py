@@ -35,3 +35,18 @@ def test_score_latest_stock_rejects_st_stock():
     )
 
     assert score_latest_stock("600001", "ST测试", df) is None
+
+
+def test_score_latest_stock_rejects_price_above_100():
+    """股价超过 100 元的股票不进入第一版短线候选。"""
+    df = pd.DataFrame(
+        {
+            "close": list(range(90, 120)),
+            "high": [price + 0.5 for price in range(90, 120)],
+            "low": [price - 0.5 for price in range(90, 120)],
+            "volume": [100] * 27 + [180, 190, 220],
+            "amount": [10_000_000] * 30,
+        }
+    )
+
+    assert score_latest_stock("600002", "高价股票", df) is None
