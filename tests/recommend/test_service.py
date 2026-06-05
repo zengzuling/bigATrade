@@ -27,6 +27,17 @@ class FakeProvider:
         )
 
 
+class RecordingProvider(FakeProvider):
+    """记录行情请求，用于验证服务层是否提前跳过风险股票。"""
+
+    def __init__(self):
+        self.requested_codes = []
+
+    def daily_bars(self, code: str, start_date: str, end_date: str):
+        self.requested_codes.append(code)
+        return super().daily_bars(code, start_date, end_date)
+
+
 class PartiallyFailingProvider(FakeProvider):
     """模拟单只股票行情接口失败，其余股票仍应继续处理。"""
 
@@ -53,6 +64,26 @@ def test_recommendation_service_returns_top_trade_plans():
     assert result[0].name == "测试股票"
     assert result[0].target_price > result[0].buy_price
     assert result[0].strength_score >= 70
+
+
+def test_recommendation_service_respects_scan_limit():
+    """真实运行时应支持限制扫描数量，避免首次验证扫全市场过慢。"""
+    service = RecommendationService(provider=FakeProvider())
+
+    result = service.recommend(date="2026-06-05", top=5, scan_limit=1)
+
+    assert len(result) == 1
+    assert result[0].code == "600000"
+
+
+def test_recommendation_service_skips_st_before_fetching_daily_bars():
+    """ST 股票应在拉行情前跳过，避免浪费 AkShare 请求。"""
+    provider = RecordingProvider()
+    service = RecommendationService(provider=provider)
+
+    service.recommend(date="2026-06-05", top=5)
+
+    assert provider.requested_codes == ["600000"]
 
 
 def test_recommendation_service_skips_stock_when_daily_bars_fail():

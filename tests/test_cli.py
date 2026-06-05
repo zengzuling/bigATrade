@@ -17,7 +17,7 @@ def test_cli_shows_help():
 class FakeRecommendationService:
     """测试用推荐服务，避免 CLI 测试依赖 AkShare 网络。"""
 
-    def recommend(self, date: str, top: int = 30):
+    def recommend(self, date: str, top: int = 30, scan_limit: int | None = None):
         return [
             build_trade_plan(
                 recommend_date=date,
@@ -45,6 +45,8 @@ def test_recommend_command_writes_csv(tmp_path, monkeypatch):
             "2026-06-05",
             "--top",
             "1",
+            "--scan-limit",
+            "10",
             "--output",
             str(output_path),
         ],

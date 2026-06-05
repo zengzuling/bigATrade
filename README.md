@@ -15,7 +15,7 @@ A股一周强势股捕捉与回测工具。
 ## 命令
 
 ```powershell
-python -m bigatrade recommend --date 2026-06-05 --top 30 --output outputs/recommend_2026-06-05.csv
+python -m bigatrade recommend --date 2026-06-05 --top 30 --scan-limit 100 --output outputs/recommend_2026-06-05.csv
 python -m bigatrade backtest --start 2025-01-01 --end 2026-06-05
 ```
 

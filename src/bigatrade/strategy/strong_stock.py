@@ -20,7 +20,7 @@ class StockScore:
 
 def score_latest_stock(code: str, name: str, daily_bars: pd.DataFrame) -> StockScore | None:
     """按最新一个交易日判断股票是否满足一周强势股候选条件。"""
-    if _is_risky_name(name):
+    if is_risky_stock_name(name):
         return None
     if len(daily_bars) < 30:
         return None
@@ -28,6 +28,8 @@ def score_latest_stock(code: str, name: str, daily_bars: pd.DataFrame) -> StockS
     bars = add_indicators(daily_bars).reset_index(drop=True)
     latest = bars.iloc[-1]
 
+    if latest["close"] > 100:
+        return None
     if latest.get("amount_ma20", 0) < 5_000_000:
         return None
     if not _is_above_key_averages(latest):
@@ -68,7 +70,7 @@ def score_latest_stock(code: str, name: str, daily_bars: pd.DataFrame) -> StockS
     )
 
 
-def _is_risky_name(name: str) -> bool:
+def is_risky_stock_name(name: str) -> bool:
     """识别 ST、退市等第一版直接排除的股票名称。"""
     upper_name = name.upper()
     return "ST" in upper_name or "退" in name
