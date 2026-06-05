@@ -27,12 +27,15 @@ class RecommendationService:
     def __init__(self, provider: MarketDataProvider) -> None:
         self._provider = provider
 
-    def recommend(self, date: str, top: int = 30) -> list[TradePlan]:
+    def recommend(self, date: str, top: int = 30, scan_limit: int | None = None) -> list[TradePlan]:
         """生成指定日期的强势股推荐计划。"""
         start_date = _lookback_start(date)
         plans: list[TradePlan] = []
+        stocks = self._provider.list_stocks()
+        if scan_limit is not None:
+            stocks = stocks[:scan_limit]
 
-        for stock in self._provider.list_stocks():
+        for stock in stocks:
             try:
                 bars = self._provider.daily_bars(stock.code, start_date, date)
             except Exception:

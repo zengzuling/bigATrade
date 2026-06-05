@@ -55,6 +55,16 @@ def test_recommendation_service_returns_top_trade_plans():
     assert result[0].strength_score >= 70
 
 
+def test_recommendation_service_respects_scan_limit():
+    """真实运行时应支持限制扫描数量，避免首次验证扫全市场过慢。"""
+    service = RecommendationService(provider=FakeProvider())
+
+    result = service.recommend(date="2026-06-05", top=5, scan_limit=1)
+
+    assert len(result) == 1
+    assert result[0].code == "600000"
+
+
 def test_recommendation_service_skips_stock_when_daily_bars_fail():
     """单只股票行情失败时不应中断整批推荐。"""
     service = RecommendationService(provider=PartiallyFailingProvider())

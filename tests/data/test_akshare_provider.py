@@ -18,6 +18,21 @@ def test_normalize_stock_list_maps_akshare_columns():
     assert [stock.name for stock in result] == ["浦发银行", "平安银行"]
 
 
+def test_normalize_stock_list_maps_current_akshare_lowercase_columns():
+    """当前 AkShare 股票列表返回 code/name 时也应能正常转换。"""
+    raw = pd.DataFrame(
+        {
+            "code": ["000001", "600000"],
+            "name": ["平安银行", "浦发银行"],
+        }
+    )
+
+    result = normalize_stock_list(raw)
+
+    assert [stock.code for stock in result] == ["000001", "600000"]
+    assert [stock.name for stock in result] == ["平安银行", "浦发银行"]
+
+
 def test_normalize_daily_bars_maps_akshare_columns_and_sorts_by_date():
     """日线行情应统一列名并按日期升序排列，供指标和回测复用。"""
     raw = pd.DataFrame(
