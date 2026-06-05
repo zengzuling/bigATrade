@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/bigatrade/__init__.py
+src/bigatrade/__main__.py
+src/bigatrade/cli.py
+src/bigatrade.egg-info/PKG-INFO
+src/bigatrade.egg-info/SOURCES.txt
+src/bigatrade.egg-info/dependency_links.txt
+src/bigatrade.egg-info/requires.txt
+src/bigatrade.egg-info/top_level.txt
+src/bigatrade/backtest/__init__.py
+src/bigatrade/backtest/engine.py
+src/bigatrade/strategy/__init__.py
+src/bigatrade/strategy/indicators.py
+src/bigatrade/strategy/strong_stock.py
+src/bigatrade/strategy/trade_plan.py
+tests/test_cli.py

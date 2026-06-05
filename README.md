@@ -1,2 +1,25 @@
 # bigATrade
-A股大盘分析,推荐股票并实时回测
+
+A股一周强势股捕捉与回测工具。
+
+第一版使用 AkShare + pandas + 自写 5 日回测，目标是验证一周内冲击 10% 的强势股策略。
+
+## 当前能力
+
+- 计算均线、涨幅、量能比、20 日高点等基础指标。
+- 按强势规则给最新交易日评分。
+- 生成固定风控交易计划：买入区间、10% 目标价、5% 止损价。
+- 按实际买入日后的时间顺序做 5 日回测。
+
+## 命令
+
+```powershell
+python -m bigatrade recommend --date 2026-06-05 --top 30
+python -m bigatrade backtest --start 2025-01-01 --end 2026-06-05
+```
+
+## 验证
+
+```powershell
+python -m pytest -q
+```
