@@ -21,6 +21,8 @@ class TradePlan:
     strength_score: float
     reasons: list[str]
     risks: list[str]
+    sector_name: str
+    market_heat: str
 
 
 def build_trade_plan(
@@ -31,6 +33,8 @@ def build_trade_plan(
     strength_score: float,
     reasons: list[str],
     risks: list[str],
+    sector_name: str = "未知",
+    market_heat: str = "未知",
 ) -> TradePlan:
     """按第一版固定风控规则生成买入区间、目标价和止损价。"""
     buy_low = round(close * 0.99, 2)
@@ -52,4 +56,6 @@ def build_trade_plan(
         strength_score=round(strength_score, 2),
         reasons=reasons,
         risks=risks,
+        sector_name=sector_name,
+        market_heat=market_heat,
     )
