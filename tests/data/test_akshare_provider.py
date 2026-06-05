@@ -2,6 +2,7 @@ import pandas as pd
 
 from bigatrade.data.akshare_provider import (
     format_market_heat,
+    filter_supported_stock_codes,
     normalize_daily_bars,
     normalize_industry_heat,
     normalize_stock_list,
@@ -36,6 +37,38 @@ def test_normalize_stock_list_maps_current_akshare_lowercase_columns():
 
     assert [stock.code for stock in result] == ["000001", "600000"]
     assert [stock.name for stock in result] == ["平安银行", "浦发银行"]
+
+
+def test_normalize_stock_list_keeps_latest_price_when_available():
+    """全市场快照带最新价时，应保留到股票信息里用于请求前预过滤。"""
+    raw = pd.DataFrame(
+        {
+            "代码": ["000001", "000002"],
+            "名称": ["平安银行", "万科A"],
+            "最新价": [11.0, 7.5],
+        }
+    )
+
+    result = normalize_stock_list(raw)
+
+    assert result[0].latest_price == 11.0
+    assert result[1].latest_price == 7.5
+
+
+def test_filter_supported_stock_codes_keeps_six_digit_a_share_codes():
+    """推荐主流程第一版只扫描常见沪深六位数字代码。"""
+    stocks = normalize_stock_list(
+        pd.DataFrame(
+            {
+                "代码": ["bj920000", "000001", "600000"],
+                "名称": ["北交所样本", "平安银行", "浦发银行"],
+            }
+        )
+    )
+
+    result = filter_supported_stock_codes(stocks)
+
+    assert [stock.code for stock in result] == ["000001", "600000"]
 
 
 def test_normalize_daily_bars_maps_akshare_columns_and_sorts_by_date():

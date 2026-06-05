@@ -9,10 +9,20 @@ def normalize_stock_list(raw: pd.DataFrame) -> list[StockInfo]:
     """把 AkShare 股票列表转换为内部股票信息。"""
     code_column = _first_existing_column(raw, ["代码", "code"])
     name_column = _first_existing_column(raw, ["名称", "name"])
+    price_column = _optional_existing_column(raw, ["最新价", "latest_price", "最新"])
     return [
-        StockInfo(code=str(row[code_column]).zfill(6), name=str(row[name_column]))
+        StockInfo(
+            code=_normalize_stock_code(row[code_column]),
+            name=str(row[name_column]),
+            latest_price=_to_optional_float(row[price_column]) if price_column else None,
+        )
         for _, row in raw.iterrows()
     ]
+
+
+def filter_supported_stock_codes(stocks: list[StockInfo]) -> list[StockInfo]:
+    """过滤当前推荐主流程支持的沪深六位数字股票代码。"""
+    return [stock for stock in stocks if stock.code.isdigit() and len(stock.code) == 6]
 
 
 def normalize_daily_bars(raw: pd.DataFrame) -> pd.DataFrame:
@@ -74,7 +84,10 @@ class AkShareProvider:
 
     def list_stocks(self) -> list[StockInfo]:
         """获取 A 股股票列表。"""
-        return normalize_stock_list(self._ak.stock_info_a_code_name())
+        try:
+            return filter_supported_stock_codes(normalize_stock_list(self._ak.stock_zh_a_spot()))
+        except Exception:
+            return filter_supported_stock_codes(normalize_stock_list(self._ak.stock_info_a_code_name()))
 
     def daily_bars(self, code: str, start_date: str, end_date: str) -> pd.DataFrame:
         """获取单只股票历史日线行情。"""
@@ -106,3 +119,27 @@ def _first_existing_column(raw: pd.DataFrame, candidates: list[str]) -> str:
         if candidate in raw.columns:
             return candidate
     raise KeyError(f"缺少必要列，候选列名: {candidates}，实际列名: {list(raw.columns)}")
+
+
+def _optional_existing_column(raw: pd.DataFrame, candidates: list[str]) -> str | None:
+    """从候选列名中选择可选列名。"""
+    for candidate in candidates:
+        if candidate in raw.columns:
+            return candidate
+    return None
+
+
+def _normalize_stock_code(value: object) -> str:
+    """规范化 AkShare 股票代码，保留北交所 bj 前缀。"""
+    code = str(value)
+    if code.lower().startswith("bj"):
+        return code.lower()
+    return code.zfill(6)
+
+
+def _to_optional_float(value: object) -> float | None:
+    """把 AkShare 数字字段转换为可选浮点数。"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

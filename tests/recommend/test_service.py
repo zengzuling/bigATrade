@@ -1,7 +1,7 @@
 import pandas as pd
 
 from bigatrade.data.models import StockInfo
-from bigatrade.recommend.service import RecommendationService
+from bigatrade.recommend.service import RecommendationService, filter_plans_by_price_buckets, parse_price_buckets
 
 
 class FakeProvider:
@@ -104,6 +104,20 @@ def test_recommendation_service_respects_scan_limit():
     assert result[0].code == "600000"
 
 
+def test_recommendation_service_prefilters_by_price_buckets_before_fetching_daily_bars():
+    """带最新价时，应在拉日线前按价格分层预过滤，减少 AkShare 请求。"""
+    provider = RecordingProvider()
+    provider.list_stocks = lambda: [
+        StockInfo(code="000001", name="低价", latest_price=8.0),
+        StockInfo(code="000002", name="高价", latest_price=55.0),
+    ]
+    service = RecommendationService(provider=provider)
+
+    service.recommend(date="2026-06-05", top=10, price_buckets=parse_price_buckets("0-10:1"))
+
+    assert provider.requested_codes == ["000001"]
+
+
 def test_recommendation_service_skips_st_before_fetching_daily_bars():
     """ST 股票应在拉行情前跳过，避免浪费 AkShare 请求。"""
     provider = RecordingProvider()
@@ -121,3 +135,45 @@ def test_recommendation_service_skips_stock_when_daily_bars_fail():
     result = service.recommend(date="2026-06-05", top=5)
 
     assert [plan.code for plan in result] == ["600000"]
+
+
+def test_parse_price_buckets_parses_non_overlapping_ranges():
+    """价格分层参数应解析为不重叠区间和目标数量。"""
+    buckets = parse_price_buckets("0-10:2,10-20:2,20-50:1")
+
+    assert [(bucket.low, bucket.high, bucket.count) for bucket in buckets] == [
+        (0, 10, 2),
+        (10, 20, 2),
+        (20, 50, 1),
+    ]
+
+
+def test_filter_plans_by_price_buckets_keeps_top_scores_per_bucket():
+    """价格分层应按评分从高到低分别取每档目标数量。"""
+    plans = [
+        build_plan("000001", 8.0, 70),
+        build_plan("000002", 9.0, 90),
+        build_plan("000003", 12.0, 88),
+        build_plan("000004", 18.0, 60),
+        build_plan("000005", 30.0, 99),
+        build_plan("000006", 55.0, 100),
+    ]
+
+    result = filter_plans_by_price_buckets(plans, parse_price_buckets("0-10:1,10-20:2,20-50:1"))
+
+    assert [plan.code for plan in result] == ["000002", "000003", "000004", "000005"]
+
+
+def build_plan(code: str, close: float, score: float):
+    """构造价格分层测试用交易计划。"""
+    from bigatrade.strategy.trade_plan import build_trade_plan
+
+    return build_trade_plan(
+        recommend_date="2026-06-05",
+        code=code,
+        name=f"测试{code}",
+        close=close,
+        strength_score=score,
+        reasons=["测试"],
+        risks=["测试"],
+    )

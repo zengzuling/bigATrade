@@ -17,7 +17,13 @@ def test_cli_shows_help():
 class FakeRecommendationService:
     """测试用推荐服务，避免 CLI 测试依赖 AkShare 网络。"""
 
-    def recommend(self, date: str, top: int = 30, scan_limit: int | None = None):
+    def recommend(
+        self,
+        date: str,
+        top: int = 30,
+        scan_limit: int | None = None,
+        price_buckets=None,
+    ):
         return [
             build_trade_plan(
                 recommend_date=date,
@@ -28,7 +34,7 @@ class FakeRecommendationService:
                 reasons=["站上多条均线"],
                 risks=["跌破均线则退出"],
             )
-        ][:top]
+        ]
 
 
 def test_recommend_command_writes_csv(tmp_path, monkeypatch):
@@ -49,6 +55,8 @@ def test_recommend_command_writes_csv(tmp_path, monkeypatch):
             "10",
             "--output",
             str(output_path),
+            "--price-buckets",
+            "0-10:1",
         ],
     )
 

@@ -4,7 +4,11 @@ import typer
 
 from bigatrade.data.akshare_provider import AkShareProvider
 from bigatrade.output.writers import write_trade_plans_csv
-from bigatrade.recommend.service import RecommendationService
+from bigatrade.recommend.service import (
+    RecommendationService,
+    filter_plans_by_price_buckets,
+    parse_price_buckets,
+)
 
 app = typer.Typer(help="A股一周强势股捕捉与回测工具。")
 
@@ -14,11 +18,14 @@ def recommend(
     date: str = typer.Option(..., help="推荐交易日，格式 YYYY-MM-DD。"),
     top: int = typer.Option(30, help="输出前 N 只候选股。"),
     scan_limit: int | None = typer.Option(None, help="限制扫描股票数量，首次验证建议 100。"),
+    price_buckets: str | None = typer.Option(None, help="价格分层，例如 0-10:2,10-20:2,20-50:1。"),
     output: Path | None = typer.Option(None, help="CSV 输出路径。"),
 ) -> None:
     """按指定交易日生成强势股推荐列表。"""
     service = create_recommendation_service()
-    plans = service.recommend(date=date, top=top, scan_limit=scan_limit)
+    buckets = parse_price_buckets(price_buckets)
+    plans = service.recommend(date=date, top=top, scan_limit=scan_limit, price_buckets=buckets)
+    plans = filter_plans_by_price_buckets(plans, buckets)
     output_path = output or Path("outputs") / f"recommend_{date}.csv"
     written_path = write_trade_plans_csv(plans, output_path)
     typer.echo(f"推荐结果已写入: {written_path}")

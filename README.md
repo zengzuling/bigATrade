@@ -19,6 +19,12 @@ python -m bigatrade recommend --date 2026-06-05 --top 30 --scan-limit 100 --outp
 python -m bigatrade backtest --start 2025-01-01 --end 2026-06-05
 ```
 
+按价格分层筛选示例：
+
+```powershell
+python -m bigatrade recommend --date 2026-06-05 --scan-limit 2000 --top 2000 --price-buckets "0-10:2,10-20:2,20-50:1" --output outputs/recommend_2026-06-05_bucket.csv
+```
+
 ## 验证
 
 ```powershell

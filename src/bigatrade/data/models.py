@@ -9,3 +9,4 @@ class StockInfo:
 
     code: str
     name: str
+    latest_price: float | None = None

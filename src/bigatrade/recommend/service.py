@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date as date_type
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 from typing import Protocol
 
 import pandas as pd
@@ -10,6 +11,15 @@ from bigatrade.data.akshare_provider import format_market_heat
 from bigatrade.data.models import StockInfo
 from bigatrade.strategy.strong_stock import is_risky_stock_name, score_latest_stock
 from bigatrade.strategy.trade_plan import TradePlan, build_trade_plan
+
+
+@dataclass(frozen=True)
+class PriceBucket:
+    """价格分层规则。"""
+
+    low: float
+    high: float
+    count: int
 
 
 class MarketDataProvider(Protocol):
@@ -34,7 +44,13 @@ class RecommendationService:
     def __init__(self, provider: MarketDataProvider) -> None:
         self._provider = provider
 
-    def recommend(self, date: str, top: int = 30, scan_limit: int | None = None) -> list[TradePlan]:
+    def recommend(
+        self,
+        date: str,
+        top: int = 30,
+        scan_limit: int | None = None,
+        price_buckets: list[PriceBucket] | None = None,
+    ) -> list[TradePlan]:
         """生成指定日期的强势股推荐计划。"""
         start_date = _lookback_start(date)
         plans: list[TradePlan] = []
@@ -42,6 +58,8 @@ class RecommendationService:
         industry_heat = self._safe_industry_heat()
         if scan_limit is not None:
             stocks = stocks[:scan_limit]
+        if price_buckets:
+            stocks = _prefilter_stocks_by_price_buckets(stocks, price_buckets)
 
         for stock in stocks:
             if is_risky_stock_name(stock.name):
@@ -95,3 +113,51 @@ def _lookback_start(date: str) -> str:
     current = datetime.strptime(date, "%Y-%m-%d").date()
     start: date_type = current - timedelta(days=90)
     return start.strftime("%Y-%m-%d")
+
+
+def parse_price_buckets(value: str | None) -> list[PriceBucket]:
+    """解析价格分层参数，例如 0-10:2,10-20:2,20-50:1。"""
+    if not value:
+        return []
+
+    buckets: list[PriceBucket] = []
+    for item in value.split(","):
+        range_part, count_part = item.split(":", maxsplit=1)
+        low_part, high_part = range_part.split("-", maxsplit=1)
+        buckets.append(
+            PriceBucket(
+                low=float(low_part),
+                high=float(high_part),
+                count=int(count_part),
+            )
+        )
+    return buckets
+
+
+def filter_plans_by_price_buckets(plans: list[TradePlan], buckets: list[PriceBucket]) -> list[TradePlan]:
+    """按价格分层从每档里选强势评分最高的推荐计划。"""
+    if not buckets:
+        return plans
+
+    selected: list[TradePlan] = []
+    for bucket in buckets:
+        bucket_plans = [
+            plan
+            for plan in plans
+            if bucket.low <= plan.close < bucket.high
+        ]
+        bucket_plans.sort(key=lambda plan: plan.strength_score, reverse=True)
+        selected.extend(bucket_plans[: bucket.count])
+    return selected
+
+
+def _prefilter_stocks_by_price_buckets(stocks: list[StockInfo], buckets: list[PriceBucket]) -> list[StockInfo]:
+    """在拉日线前按最新价做价格分层预过滤。"""
+    prefiltered: list[StockInfo] = []
+    for stock in stocks:
+        if stock.latest_price is None:
+            prefiltered.append(stock)
+            continue
+        if any(bucket.low <= stock.latest_price < bucket.high for bucket in buckets):
+            prefiltered.append(stock)
+    return prefiltered
