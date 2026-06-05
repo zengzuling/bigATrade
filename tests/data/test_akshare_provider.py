@@ -1,6 +1,11 @@
 import pandas as pd
 
-from bigatrade.data.akshare_provider import normalize_daily_bars, normalize_stock_list
+from bigatrade.data.akshare_provider import (
+    format_market_heat,
+    normalize_daily_bars,
+    normalize_industry_heat,
+    normalize_stock_list,
+)
 
 
 def test_normalize_stock_list_maps_akshare_columns():
@@ -52,3 +57,36 @@ def test_normalize_daily_bars_maps_akshare_columns_and_sorts_by_date():
     assert list(result.columns) == ["date", "open", "close", "high", "low", "volume", "amount"]
     assert result.iloc[0]["date"] == "2026-06-04"
     assert result.iloc[1]["close"] == 10.2
+
+
+def test_normalize_industry_heat_maps_board_name_to_heat_text():
+    """行业板块热度应按板块名称映射为可读文本。"""
+    raw = pd.DataFrame(
+        {
+            "排名": [1, 12],
+            "板块名称": ["通信设备", "银行"],
+            "涨跌幅": [3.2, -0.5],
+            "上涨家数": [15, 2],
+            "下跌家数": [5, 8],
+        }
+    )
+
+    result = normalize_industry_heat(raw)
+
+    assert result["通信设备"] == "涨跌幅 3.20%，上涨占比 75.00%，排名 1"
+    assert result["银行"] == "涨跌幅 -0.50%，上涨占比 20.00%，排名 12"
+
+
+def test_format_market_heat_handles_missing_sector():
+    """找不到行业且没有平均热度时返回未知，避免推荐命令失败。"""
+    assert format_market_heat("不存在行业", {"通信设备": "热度"}) == "未知"
+
+
+def test_format_market_heat_uses_market_average_when_available():
+    """行业无法精确匹配时应使用全行业平均热度作为退路。"""
+    heat = {
+        "通信设备": "涨跌幅 3.20%，上涨占比 75.00%，排名 8",
+        "__market_average__": "全行业平均涨跌幅 1.25%，平均上涨占比 60.00%",
+    }
+
+    assert format_market_heat("不存在行业", heat) == "全行业平均涨跌幅 1.25%，平均上涨占比 60.00%"

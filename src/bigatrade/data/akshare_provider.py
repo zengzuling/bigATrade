@@ -32,6 +32,38 @@ def normalize_daily_bars(raw: pd.DataFrame) -> pd.DataFrame:
     return result.sort_values("date").reset_index(drop=True)
 
 
+def normalize_industry_heat(raw: pd.DataFrame) -> dict[str, str]:
+    """把 AkShare 行业板块行情转换为行业名称到市场热度文本的映射。"""
+    result: dict[str, str] = {}
+    rise_ratios: list[float] = []
+    change_pcts: list[float] = []
+    for _, row in raw.iterrows():
+        sector_name = str(row["板块名称"])
+        total_count = float(row["上涨家数"]) + float(row["下跌家数"])
+        rise_ratio = 0.0 if total_count == 0 else float(row["上涨家数"]) / total_count * 100
+        change_pct = float(row["涨跌幅"])
+        rise_ratios.append(rise_ratio)
+        change_pcts.append(change_pct)
+        result[sector_name] = (
+            f"涨跌幅 {change_pct:.2f}%，"
+            f"上涨占比 {rise_ratio:.2f}%，"
+            f"排名 {int(row['排名'])}"
+        )
+    if change_pcts:
+        avg_change = sum(change_pcts) / len(change_pcts)
+        avg_rise_ratio = sum(rise_ratios) / len(rise_ratios)
+        result["__market_average__"] = (
+            f"全行业平均涨跌幅 {avg_change:.2f}%，"
+            f"平均上涨占比 {avg_rise_ratio:.2f}%"
+        )
+    return result
+
+
+def format_market_heat(sector_name: str, industry_heat: dict[str, str]) -> str:
+    """根据行业名称格式化市场热度，缺失时返回未知。"""
+    return industry_heat.get(sector_name) or industry_heat.get("__market_average__", "未知")
+
+
 class AkShareProvider:
     """AkShare 免费行情数据提供者。"""
 
@@ -54,6 +86,18 @@ class AkShareProvider:
             adjust="qfq",
         )
         return normalize_daily_bars(raw)
+
+    def stock_sector(self, code: str) -> str:
+        """获取单只股票所属行业板块。"""
+        raw = self._ak.stock_individual_info_em(symbol=code)
+        matched = raw.loc[raw["item"] == "行业", "value"]
+        if matched.empty:
+            return "未知"
+        return str(matched.iloc[0])
+
+    def industry_heat(self) -> dict[str, str]:
+        """获取当前行业板块市场热度。"""
+        return normalize_industry_heat(self._ak.stock_board_industry_name_em())
 
 
 def _first_existing_column(raw: pd.DataFrame, candidates: list[str]) -> str:

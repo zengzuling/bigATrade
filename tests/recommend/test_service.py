@@ -26,6 +26,12 @@ class FakeProvider:
             }
         )
 
+    def stock_sector(self, code: str):
+        return "通信设备"
+
+    def industry_heat(self):
+        return {"通信设备": "涨跌幅 3.20%，上涨占比 75.00%，排名 8"}
+
 
 class RecordingProvider(FakeProvider):
     """记录行情请求，用于验证服务层是否提前跳过风险股票。"""
@@ -53,6 +59,16 @@ class PartiallyFailingProvider(FakeProvider):
         return super().daily_bars(code, start_date, end_date)
 
 
+class UnknownSectorProvider(FakeProvider):
+    """模拟个股行业和行业热度表无法精确匹配。"""
+
+    def stock_sector(self, code: str):
+        return "细分行业"
+
+    def industry_heat(self):
+        return {"__market_average__": "全行业平均涨跌幅 1.25%，平均上涨占比 60.00%"}
+
+
 def test_recommendation_service_returns_top_trade_plans():
     """推荐服务应筛掉风险股票，并把强势评分转换为交易计划。"""
     service = RecommendationService(provider=FakeProvider())
@@ -64,6 +80,18 @@ def test_recommendation_service_returns_top_trade_plans():
     assert result[0].name == "测试股票"
     assert result[0].target_price > result[0].buy_price
     assert result[0].strength_score >= 70
+    assert result[0].sector_name == "通信设备"
+    assert result[0].market_heat == "涨跌幅 3.20%，上涨占比 75.00%，排名 8"
+
+
+def test_recommendation_service_uses_market_average_heat_when_sector_missing():
+    """所属板块无法精确匹配热度时，应写入全行业平均热度。"""
+    service = RecommendationService(provider=UnknownSectorProvider())
+
+    result = service.recommend(date="2026-06-05", top=5)
+
+    assert result[0].sector_name == "细分行业"
+    assert result[0].market_heat == "全行业平均涨跌幅 1.25%，平均上涨占比 60.00%"
 
 
 def test_recommendation_service_respects_scan_limit():

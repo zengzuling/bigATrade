@@ -14,6 +14,8 @@ def test_write_trade_plans_csv_writes_stable_chinese_headers(tmp_path):
         strength_score=88.0,
         reasons=["站上多条均线", "成交量放大"],
         risks=["跌破均线则退出"],
+        sector_name="通信设备",
+        market_heat="涨跌幅 3.20%，上涨占比 75.00%，排名 8",
     )
     output_path = tmp_path / "recommend.csv"
 
@@ -24,5 +26,7 @@ def test_write_trade_plans_csv_writes_stable_chinese_headers(tmp_path):
 
     assert rows[0]["股票代码"] == "600000"
     assert rows[0]["股票名称"] == "浦发银行"
+    assert rows[0]["所属板块"] == "通信设备"
+    assert rows[0]["市场热度"] == "涨跌幅 3.20%，上涨占比 75.00%，排名 8"
     assert rows[0]["推荐原因"] == "站上多条均线; 成交量放大"
     assert rows[0]["风险提示"] == "跌破均线则退出"
