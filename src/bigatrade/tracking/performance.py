@@ -42,6 +42,7 @@ class DailyQuote:
     amount: float
     gain_from_buy_pct: float
     gain_from_close_pct: float
+    gain_from_recommend_pct: float
     hit_target: bool
     hit_stop_loss: bool
 
@@ -145,6 +146,7 @@ def _build_daily_quote(
         amount=float(row["amount"]),
         gain_from_buy_pct=_gain_pct(close_price, recommendation.buy_price),
         gain_from_close_pct=_gain_pct(close_price, recommendation.recommend_close),
+        gain_from_recommend_pct=_gain_pct(close_price, recommendation.recommend_close),
         hit_target=high_price >= recommendation.target_price,
         hit_stop_loss=low_price <= recommendation.stop_loss_price,
     )

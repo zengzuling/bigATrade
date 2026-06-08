@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from typer.testing import CliRunner
 
 from bigatrade import cli
@@ -181,3 +183,39 @@ def test_track_performance_command_tracks_daily_quotes(monkeypatch):
     assert result.exit_code == 0
     assert fake_tracker.tracked_date == "2026-06-08"
     assert "tracked=5" in result.output
+
+
+def test_resolve_track_date_uses_previous_trade_day_before_market_close(monkeypatch):
+    """today 在收盘前应回退到最近一个已收盘交易日。"""
+    monkeypatch.setattr(cli, "_current_china_datetime", lambda: datetime(2026, 6, 8, 11, 0, 0))
+    monkeypatch.setattr(
+        cli,
+        "_load_trade_dates",
+        lambda: ["2026-06-04", "2026-06-05", "2026-06-08"],
+    )
+
+    assert cli._resolve_track_date("today") == "2026-06-05"
+
+
+def test_resolve_track_date_uses_today_after_market_close(monkeypatch):
+    """today 在收盘缓冲时间后可使用当天交易日。"""
+    monkeypatch.setattr(cli, "_current_china_datetime", lambda: datetime(2026, 6, 8, 15, 30, 0))
+    monkeypatch.setattr(
+        cli,
+        "_load_trade_dates",
+        lambda: ["2026-06-04", "2026-06-05", "2026-06-08"],
+    )
+
+    assert cli._resolve_track_date("today") == "2026-06-08"
+
+
+def test_resolve_track_date_uses_latest_trade_day_on_non_trading_day(monkeypatch):
+    """today 落在非交易日时应回退到最近交易日。"""
+    monkeypatch.setattr(cli, "_current_china_datetime", lambda: datetime(2026, 6, 7, 18, 0, 0))
+    monkeypatch.setattr(
+        cli,
+        "_load_trade_dates",
+        lambda: ["2026-06-04", "2026-06-05", "2026-06-08"],
+    )
+
+    assert cli._resolve_track_date("today") == "2026-06-05"

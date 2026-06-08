@@ -1,0 +1,4 @@
+interface:
+  display_name: "Daily Review WeChat"
+  short_description: "Generate WeChat stock recap titles poster copy and tomorrow plan"
+  default_prompt: "Use $daily-review-wechat to generate a stock daily review with title, poster copy, today recap, and tomorrow plan."

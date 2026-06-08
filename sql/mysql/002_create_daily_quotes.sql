@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS `stock_recommendation_daily_quotes` (
   `amount` DECIMAL(20,4) NULL COMMENT '成交额',
   `gain_from_buy_pct` DECIMAL(8,4) NOT NULL COMMENT '相对推荐买入中位价涨幅',
   `gain_from_close_pct` DECIMAL(8,4) NOT NULL COMMENT '相对推荐日收盘价涨幅',
+  `gain_from_recommend_pct` DECIMAL(8,4) NOT NULL COMMENT '自推荐写库日起累计涨跌幅',
   `hit_target` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '当日最高价是否达到目标价',
   `hit_stop_loss` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '当日最低价是否跌破止损价',
   `raw_json` JSON NULL COMMENT '原始行情备份',

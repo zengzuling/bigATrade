@@ -30,7 +30,7 @@ class MySqlTrackingRepository:
         }
 
     def list_open_recommendations(self, trade_date: str) -> list[RecommendationToTrack]:
-        """查询指定交易日仍处于观察期、且当天尚未记录表现的推荐股票。"""
+        """查询指定交易日仍处于观察期的推荐股票，允许同日重跑修正已写入数据。"""
         sql = """
             SELECT
                 sr.id,
@@ -49,13 +49,9 @@ class MySqlTrackingRepository:
                   SELECT COUNT(*)
                   FROM stock_recommendation_daily_quotes q
                   WHERE q.recommendation_id = sr.id
-              ) < sr.max_holding_days
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM stock_recommendation_daily_quotes q
-                  WHERE q.recommendation_id = sr.id
-                    AND q.trade_date = %s
+                    AND q.trade_date <> %s
               )
+              < sr.max_holding_days
             ORDER BY sr.recommend_date, sr.rank_no, sr.id
         """
         with self._connect() as conn:
@@ -87,12 +83,12 @@ class MySqlTrackingRepository:
             INSERT INTO stock_recommendation_daily_quotes (
                 recommendation_id, run_id, recommend_date, trade_date, stock_code, stock_name,
                 open_price, close_price, high_price, low_price, pre_close_price, change_pct,
-                volume, amount, gain_from_buy_pct, gain_from_close_pct, hit_target,
+                volume, amount, gain_from_buy_pct, gain_from_close_pct, gain_from_recommend_pct, hit_target,
                 hit_stop_loss, raw_json
             ) VALUES (
                 %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
                 %s, %s
             )
             ON DUPLICATE KEY UPDATE
@@ -106,6 +102,7 @@ class MySqlTrackingRepository:
                 amount = VALUES(amount),
                 gain_from_buy_pct = VALUES(gain_from_buy_pct),
                 gain_from_close_pct = VALUES(gain_from_close_pct),
+                gain_from_recommend_pct = VALUES(gain_from_recommend_pct),
                 hit_target = VALUES(hit_target),
                 hit_stop_loss = VALUES(hit_stop_loss),
                 raw_json = VALUES(raw_json)
@@ -145,6 +142,7 @@ def _quote_to_row(quote: DailyQuote) -> tuple:
         quote.amount,
         quote.gain_from_buy_pct,
         quote.gain_from_close_pct,
+        quote.gain_from_recommend_pct,
         int(quote.hit_target),
         int(quote.hit_stop_loss),
         json.dumps(asdict(quote), ensure_ascii=False),

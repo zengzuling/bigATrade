@@ -61,5 +61,6 @@ def test_tracker_saves_daily_quote_with_gain_and_target_flags():
     assert quote.change_pct == 12.0
     assert quote.gain_from_buy_pct == 12.0
     assert quote.gain_from_close_pct == 12.0
+    assert quote.gain_from_recommend_pct == 12.0
     assert quote.hit_target is True
     assert quote.hit_stop_loss is False

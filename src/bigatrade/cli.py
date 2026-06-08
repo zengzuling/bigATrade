@@ -1,6 +1,8 @@
 import os
 from datetime import date as date_type
+from datetime import datetime, time as time_type
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import typer
 
@@ -19,6 +21,8 @@ from bigatrade.tracking.mysql_repository import MySqlTrackingRepository
 from bigatrade.tracking.performance import PerformanceTracker
 
 app = typer.Typer(help="A股一周强势股捕捉与回测工具。")
+TRACK_READY_TIME = time_type(hour=15, minute=30)
+CHINA_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 @app.command()
@@ -189,10 +193,38 @@ def _parse_scan_limit(value: str | None) -> int | None:
 
 
 def _resolve_track_date(value: str) -> str:
-    """解析跟踪日期，today 表示当前日期。"""
+    """解析跟踪日期，today 自动映射为最近一个已收盘交易日。"""
     if value.lower() == "today":
-        return date_type.today().strftime("%Y-%m-%d")
+        now = _current_china_datetime()
+        today = now.date().strftime("%Y-%m-%d")
+        trade_dates = _load_trade_dates()
+        allow_same_day = now.time() >= TRACK_READY_TIME
+        return _latest_closed_trade_date(trade_dates, today, allow_same_day=allow_same_day)
     return value
+
+
+def _current_china_datetime() -> datetime:
+    """返回北京时间，便于统一判断 A 股是否已经收盘。"""
+    return datetime.now(CHINA_TIMEZONE)
+
+
+def _load_trade_dates() -> list[str]:
+    """加载 A 股交易日历，避免周末和法定节假日误判。"""
+    provider = AkShareProvider()
+    raw = provider._ak.tool_trade_date_hist_sina()
+    return sorted(raw["trade_date"].astype(str).tolist())
+
+
+def _latest_closed_trade_date(trade_dates: list[str], today: str, allow_same_day: bool) -> str:
+    """从交易日历中选出最近一个已收盘交易日。"""
+    for trade_date in reversed(trade_dates):
+        if allow_same_day:
+            if trade_date <= today:
+                return trade_date
+        else:
+            if trade_date < today:
+                return trade_date
+    raise typer.BadParameter("交易日历为空，无法解析可追踪交易日")
 
 
 def _required_option(value: str | None, env_name: str) -> str:
