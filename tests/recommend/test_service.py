@@ -137,6 +137,20 @@ def test_recommendation_service_skips_stock_when_daily_bars_fail():
     assert [plan.code for plan in result] == ["600000"]
 
 
+def test_recommendation_service_records_diagnostics_for_empty_or_failed_stages():
+    """推荐服务应记录各阶段数量，避免空结果时无法判断根因。"""
+    service = RecommendationService(provider=PartiallyFailingProvider())
+
+    service.recommend(date="2026-06-05", top=5)
+
+    diagnostics = service.last_diagnostics
+    assert diagnostics.scanned_stocks == 2
+    assert diagnostics.risky_name_stocks == 0
+    assert diagnostics.daily_bar_errors == 1
+    assert diagnostics.scored_plans == 1
+    assert diagnostics.output_plans == 1
+
+
 def test_parse_price_buckets_parses_non_overlapping_ranges():
     """价格分层参数应解析为不重叠区间和目标数量。"""
     buckets = parse_price_buckets("0-10:2,10-20:2,20-50:1")

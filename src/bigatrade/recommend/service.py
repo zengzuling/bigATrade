@@ -22,6 +22,21 @@ class PriceBucket:
     count: int
 
 
+@dataclass
+class RecommendationDiagnostics:
+    """记录推荐流程各阶段数量，便于定位空结果根因。"""
+
+    total_stocks: int = 0
+    scanned_stocks: int = 0
+    price_prefiltered_stocks: int = 0
+    risky_name_stocks: int = 0
+    daily_bar_errors: int = 0
+    empty_daily_bars: int = 0
+    score_filtered_stocks: int = 0
+    scored_plans: int = 0
+    output_plans: int = 0
+
+
 class MarketDataProvider(Protocol):
     """推荐服务依赖的数据源协议。"""
 
@@ -43,6 +58,7 @@ class RecommendationService:
 
     def __init__(self, provider: MarketDataProvider) -> None:
         self._provider = provider
+        self.last_diagnostics = RecommendationDiagnostics()
 
     def recommend(
         self,
@@ -52,27 +68,35 @@ class RecommendationService:
         price_buckets: list[PriceBucket] | None = None,
     ) -> list[TradePlan]:
         """生成指定日期的强势股推荐计划。"""
+        diagnostics = RecommendationDiagnostics()
         start_date = _lookback_start(date)
         plans: list[TradePlan] = []
         stocks = self._provider.list_stocks()
+        diagnostics.total_stocks = len(stocks)
         industry_heat = self._safe_industry_heat()
         if scan_limit is not None:
             stocks = stocks[:scan_limit]
+        diagnostics.scanned_stocks = len(stocks)
         if price_buckets:
             stocks = _prefilter_stocks_by_price_buckets(stocks, price_buckets)
+        diagnostics.price_prefiltered_stocks = len(stocks)
 
         for stock in stocks:
             if is_risky_stock_name(stock.name):
+                diagnostics.risky_name_stocks += 1
                 continue
             try:
                 bars = self._provider.daily_bars(stock.code, start_date, date)
             except Exception:
+                diagnostics.daily_bar_errors += 1
                 continue
             if bars.empty:
+                diagnostics.empty_daily_bars += 1
                 continue
 
             score = score_latest_stock(stock.code, stock.name, bars)
             if score is None:
+                diagnostics.score_filtered_stocks += 1
                 continue
 
             latest_close = float(bars.sort_values("date").iloc[-1]["close"])
@@ -90,8 +114,12 @@ class RecommendationService:
                     market_heat=format_market_heat(sector_name, industry_heat),
                 )
             )
+            diagnostics.scored_plans += 1
 
-        return sorted(plans, key=lambda plan: plan.strength_score, reverse=True)[:top]
+        result = sorted(plans, key=lambda plan: plan.strength_score, reverse=True)[:top]
+        diagnostics.output_plans = len(result)
+        self.last_diagnostics = diagnostics
+        return result
 
     def _safe_industry_heat(self) -> dict[str, str]:
         """安全获取行业热度，接口失败时不影响推荐主流程。"""

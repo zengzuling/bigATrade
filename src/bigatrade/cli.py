@@ -5,6 +5,7 @@ import typer
 from bigatrade.data.akshare_provider import AkShareProvider
 from bigatrade.output.writers import write_trade_plans_csv
 from bigatrade.recommend.service import (
+    RecommendationDiagnostics,
     RecommendationService,
     filter_plans_by_price_buckets,
     parse_price_buckets,
@@ -26,9 +27,14 @@ def recommend(
     buckets = parse_price_buckets(price_buckets)
     plans = service.recommend(date=date, top=top, scan_limit=scan_limit, price_buckets=buckets)
     plans = filter_plans_by_price_buckets(plans, buckets)
+    diagnostics = getattr(service, "last_diagnostics", None)
+    if isinstance(diagnostics, RecommendationDiagnostics):
+        diagnostics.output_plans = len(plans)
     output_path = output or Path("outputs") / f"recommend_{date}.csv"
     written_path = write_trade_plans_csv(plans, output_path)
     typer.echo(f"推荐结果已写入: {written_path}")
+    if isinstance(diagnostics, RecommendationDiagnostics):
+        typer.echo(_format_recommendation_diagnostics(diagnostics))
 
 
 @app.command()
@@ -40,3 +46,19 @@ def backtest(start: str, end: str) -> None:
 def create_recommendation_service() -> RecommendationService:
     """创建默认推荐服务，生产环境使用 AkShare 免费数据。"""
     return RecommendationService(provider=AkShareProvider())
+
+
+def _format_recommendation_diagnostics(diagnostics: RecommendationDiagnostics) -> str:
+    """格式化推荐流程统计，空结果时直接暴露失败阶段。"""
+    return (
+        "扫描统计: "
+        f"股票总数={diagnostics.total_stocks}, "
+        f"本次扫描={diagnostics.scanned_stocks}, "
+        f"价格预筛后={diagnostics.price_prefiltered_stocks}, "
+        f"风险名称跳过={diagnostics.risky_name_stocks}, "
+        f"日线异常={diagnostics.daily_bar_errors}, "
+        f"日线为空={diagnostics.empty_daily_bars}, "
+        f"策略过滤={diagnostics.score_filtered_stocks}, "
+        f"入选候选={diagnostics.scored_plans}, "
+        f"最终输出={diagnostics.output_plans}"
+    )
