@@ -1,6 +1,7 @@
 from typer.testing import CliRunner
 
 from bigatrade import cli
+from bigatrade.tracking.performance import TrackingResult
 from bigatrade.strategy.trade_plan import build_trade_plan
 
 
@@ -105,3 +106,27 @@ def test_recommend_command_accepts_all_scan_limit_and_prefilter_buckets(tmp_path
         (10, 20, 120),
         (20, 50, 80),
     ]
+
+
+class FakePerformanceTracker:
+    """测试用表现跟踪服务，避免 CLI 测试连接 MySQL 和 AkShare。"""
+
+    def __init__(self):
+        self.tracked_date = None
+
+    def track(self, trade_date: str):
+        self.tracked_date = trade_date
+        return TrackingResult(trade_date=trade_date, candidate_count=5, tracked_count=5, skipped_count=0)
+
+
+def test_track_performance_command_tracks_daily_quotes(monkeypatch):
+    """track-performance 命令应按指定日期触发表现跟踪。"""
+    fake_tracker = FakePerformanceTracker()
+    monkeypatch.setattr(cli, "create_performance_tracker", lambda **kwargs: fake_tracker)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["track-performance", "--date", "2026-06-08"])
+
+    assert result.exit_code == 0
+    assert fake_tracker.tracked_date == "2026-06-08"
+    assert "tracked=5" in result.output
