@@ -33,6 +33,14 @@ python -m bigatrade recommend --date 2026-06-05 --scan-limit all --top 2000 --pr
 
 这个命令会先用 AkShare 全市场快照过滤价格桶，再按成交额和涨跌幅从每个价格桶挑候选，只对候选池拉日线。默认会把日线缓存到 `data/cache/`，后续重复跑同一日期范围会减少 AkShare 请求。
 
+带市场热点版本加分的周度推荐示例：
+
+```powershell
+python -m bigatrade recommend --date 2026-06-05 --scan-limit all --top 2000 --price-buckets "0-10:2,10-20:2,20-50:1" --prefilter-per-bucket "0-10:120,10-20:120,20-50:80" --hotspot-db-host 47.110.235.19 --hotspot-db-port 33066 --hotspot-db-user zzl --hotspot-db-password "Abc@123456" --hotspot-top-industry 20 --hotspot-top-concept 20 --output outputs/recommend_2026-06-05_hotspot.csv
+```
+
+该命令会在推荐前先生成一版市场热点，写入 `market_hotspot_versions` 和 `market_hotspot_boards`，再把命中行业热点的股票加入强势评分。命中热点时，推荐原因会出现“热点板块加分”。
+
 ## 验证
 
 ```powershell

@@ -1,6 +1,7 @@
 from typer.testing import CliRunner
 
 from bigatrade import cli
+from bigatrade.hotspot.service import HotspotVersion
 from bigatrade.tracking.performance import TrackingResult
 from bigatrade.strategy.trade_plan import build_trade_plan
 
@@ -28,11 +29,13 @@ class FakeRecommendationService:
         scan_limit: int | None = None,
         price_buckets=None,
         prefilter_buckets=None,
+        hotspot_scores=None,
     ):
         self.last_kwargs = {
             "scan_limit": scan_limit,
             "price_buckets": price_buckets,
             "prefilter_buckets": prefilter_buckets,
+            "hotspot_scores": hotspot_scores,
         }
         return [
             build_trade_plan(
@@ -106,6 +109,54 @@ def test_recommend_command_accepts_all_scan_limit_and_prefilter_buckets(tmp_path
         (10, 20, 120),
         (20, 50, 80),
     ]
+
+
+class FakeHotspotService:
+    """测试用热点服务。"""
+
+    def __init__(self):
+        self.called = False
+
+    def refresh_hotspots(self, trade_date: str, top_industry: int = 20, top_concept: int = 20):
+        self.called = True
+        return HotspotVersion(
+            version_id=9,
+            trade_date=trade_date,
+            boards=[],
+            industry_bonus_scores={"通信设备": 8.0},
+        )
+
+
+def test_recommend_command_refreshes_hotspots_before_recommend(tmp_path, monkeypatch):
+    """传入热点数据库参数时，recommend 应先刷新热点版本再推荐。"""
+    fake_service = FakeRecommendationService()
+    fake_hotspot_service = FakeHotspotService()
+    monkeypatch.setattr(cli, "create_recommendation_service", lambda **kwargs: fake_service)
+    monkeypatch.setattr(cli, "create_hotspot_service", lambda **kwargs: fake_hotspot_service)
+    output_path = tmp_path / "recommend.csv"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        [
+            "recommend",
+            "--date",
+            "2026-06-05",
+            "--hotspot-db-host",
+            "127.0.0.1",
+            "--hotspot-db-user",
+            "u",
+            "--hotspot-db-password",
+            "p",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_hotspot_service.called is True
+    assert fake_service.last_kwargs["hotspot_scores"] == {"通信设备": 8.0}
+    assert "热点版本已写入: id=9" in result.output
 
 
 class FakePerformanceTracker:

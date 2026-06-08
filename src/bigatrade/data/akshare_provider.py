@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from bigatrade.data.models import StockInfo
+from bigatrade.hotspot.service import HotspotBoard
 
 
 def normalize_stock_list(raw: pd.DataFrame) -> list[StockInfo]:
@@ -78,6 +79,23 @@ def format_market_heat(sector_name: str, industry_heat: dict[str, str]) -> str:
     return industry_heat.get(sector_name) or industry_heat.get("__market_average__", "未知")
 
 
+def normalize_hotspot_boards(raw: pd.DataFrame, board_type: str) -> list[HotspotBoard]:
+    """把 AkShare 板块行情转换为热点板块结构。"""
+    return [
+        HotspotBoard(
+            board_type=board_type,
+            board_name=str(row["板块名称"]),
+            change_pct=_to_float(row["涨跌幅"]),
+            turnover_rate=_to_float(row["换手率"]),
+            rise_count=int(_to_float(row["上涨家数"])),
+            fall_count=int(_to_float(row["下跌家数"])),
+            leading_stock=str(row["领涨股票"]),
+            leading_stock_change_pct=_to_float(row["领涨股票-涨跌幅"]),
+        )
+        for _, row in raw.iterrows()
+    ]
+
+
 class AkShareProvider:
     """AkShare 免费行情数据提供者。"""
 
@@ -116,6 +134,14 @@ class AkShareProvider:
         """获取当前行业板块市场热度。"""
         return normalize_industry_heat(self._ak.stock_board_industry_name_em())
 
+    def industry_boards(self) -> list[HotspotBoard]:
+        """获取行业热点板块列表。"""
+        return normalize_hotspot_boards(self._ak.stock_board_industry_name_em(), "industry")
+
+    def concept_boards(self) -> list[HotspotBoard]:
+        """获取概念热点板块列表。"""
+        return normalize_hotspot_boards(self._ak.stock_board_concept_name_em(), "concept")
+
 
 def _first_existing_column(raw: pd.DataFrame, candidates: list[str]) -> str:
     """从候选列名中选择 AkShare 当前实际返回的列名。"""
@@ -149,3 +175,9 @@ def _to_optional_float(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _to_float(value: object) -> float:
+    """把 AkShare 数字字段转换为浮点数，缺失时按 0 处理。"""
+    optional = _to_optional_float(value)
+    return 0.0 if optional is None else optional

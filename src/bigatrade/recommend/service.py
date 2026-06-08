@@ -68,6 +68,7 @@ class RecommendationService:
         scan_limit: int | None = None,
         price_buckets: list[PriceBucket] | None = None,
         prefilter_buckets: list[PriceBucket] | None = None,
+        hotspot_scores: dict[str, float] | None = None,
     ) -> list[TradePlan]:
         """生成指定日期的强势股推荐计划。"""
         diagnostics = RecommendationDiagnostics()
@@ -106,14 +107,18 @@ class RecommendationService:
 
             latest_close = float(bars.sort_values("date").iloc[-1]["close"])
             sector_name = self._safe_stock_sector(stock.code)
+            hotspot_bonus = (hotspot_scores or {}).get(sector_name, 0.0)
+            reasons = list(score.reasons)
+            if hotspot_bonus > 0:
+                reasons.append(f"热点板块加分 {hotspot_bonus:.1f}：{sector_name}")
             plans.append(
                 build_trade_plan(
                     recommend_date=date,
                     code=stock.code,
                     name=stock.name,
                     close=latest_close,
-                    strength_score=score.score,
-                    reasons=score.reasons,
+                    strength_score=score.score + hotspot_bonus,
+                    reasons=reasons,
                     risks=score.risks,
                     sector_name=sector_name,
                     market_heat=format_market_heat(sector_name, industry_heat),

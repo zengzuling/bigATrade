@@ -6,6 +6,8 @@ import typer
 
 from bigatrade.data.akshare_provider import AkShareProvider
 from bigatrade.data.cache_provider import CachedMarketDataProvider
+from bigatrade.hotspot.mysql_repository import MySqlHotspotRepository
+from bigatrade.hotspot.service import HotspotService
 from bigatrade.output.writers import write_trade_plans_csv
 from bigatrade.recommend.service import (
     RecommendationDiagnostics,
@@ -27,18 +29,44 @@ def recommend(
     price_buckets: str | None = typer.Option(None, help="价格分层，例如 0-10:2,10-20:2,20-50:1。"),
     prefilter_per_bucket: str | None = typer.Option(None, help="日线前候选预筛，例如 0-10:120,10-20:120,20-50:80。"),
     cache_dir: Path | None = typer.Option(Path("data/cache"), help="本地行情缓存目录；传空值则不启用缓存。"),
+    hotspot_db_host: str | None = typer.Option(None, help="热点版本 MySQL 地址；传入后推荐前刷新热点版本。"),
+    hotspot_db_port: int | None = typer.Option(None, help="热点版本 MySQL 端口。"),
+    hotspot_db_user: str | None = typer.Option(None, help="热点版本 MySQL 用户。"),
+    hotspot_db_password: str | None = typer.Option(None, help="热点版本 MySQL 密码。"),
+    hotspot_db_name: str = typer.Option("bigatrade", help="热点版本 MySQL 数据库名。"),
+    hotspot_top_industry: int = typer.Option(20, help="参与热点加分的行业板块数量。"),
+    hotspot_top_concept: int = typer.Option(20, help="写入热点版本的概念板块数量。"),
     output: Path | None = typer.Option(None, help="CSV 输出路径。"),
 ) -> None:
     """按指定交易日生成强势股推荐列表。"""
     service = create_recommendation_service(cache_dir=cache_dir)
     buckets = parse_price_buckets(price_buckets)
     prefilter_buckets = parse_price_buckets(prefilter_per_bucket)
+    hotspot_scores: dict[str, float] | None = None
+    if hotspot_db_host:
+        hotspot_version = create_hotspot_service(
+            db_host=hotspot_db_host,
+            db_port=hotspot_db_port,
+            db_user=hotspot_db_user,
+            db_password=hotspot_db_password,
+            db_name=hotspot_db_name,
+        ).refresh_hotspots(
+            trade_date=date,
+            top_industry=hotspot_top_industry,
+            top_concept=hotspot_top_concept,
+        )
+        hotspot_scores = hotspot_version.industry_bonus_scores
+        typer.echo(
+            f"热点版本已写入: id={hotspot_version.version_id}, "
+            f"行业加分板块={len(hotspot_scores)}"
+        )
     plans = service.recommend(
         date=date,
         top=top,
         scan_limit=_parse_scan_limit(scan_limit),
         price_buckets=buckets,
         prefilter_buckets=prefilter_buckets,
+        hotspot_scores=hotspot_scores,
     )
     plans = filter_plans_by_price_buckets(plans, buckets)
     diagnostics = getattr(service, "last_diagnostics", None)
@@ -113,6 +141,24 @@ def create_performance_tracker(
         database=db_name,
     )
     return PerformanceTracker(provider=provider, repository=repository)
+
+
+def create_hotspot_service(
+    db_host: str,
+    db_port: int | None,
+    db_user: str | None,
+    db_password: str | None,
+    db_name: str = "bigatrade",
+) -> HotspotService:
+    """创建市场热点刷新服务。"""
+    repository = MySqlHotspotRepository(
+        host=db_host,
+        port=db_port or int(os.environ.get("BIGATRADE_DB_PORT", "3306")),
+        user=_required_option(db_user, "BIGATRADE_DB_USER"),
+        password=_required_option(db_password, "BIGATRADE_DB_PASSWORD"),
+        database=db_name,
+    )
+    return HotspotService(provider=AkShareProvider(), repository=repository)
 
 
 def _format_recommendation_diagnostics(diagnostics: RecommendationDiagnostics) -> str:

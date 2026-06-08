@@ -3,6 +3,7 @@ import pandas as pd
 from bigatrade.data.akshare_provider import (
     format_market_heat,
     filter_supported_stock_codes,
+    normalize_hotspot_boards,
     normalize_daily_bars,
     normalize_industry_heat,
     normalize_stock_list,

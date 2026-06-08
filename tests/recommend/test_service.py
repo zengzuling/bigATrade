@@ -191,6 +191,18 @@ def test_recommendation_service_records_diagnostics_for_empty_or_failed_stages()
     assert diagnostics.output_plans == 1
 
 
+def test_recommendation_service_adds_hotspot_bonus_to_matching_sector():
+    """推荐服务应给命中热点板块的股票加分，并把热点原因写入推荐原因。"""
+    provider = FakeProvider()
+    provider.stock_sector = lambda code: "通信设备"
+    service = RecommendationService(provider=provider)
+
+    result = service.recommend(date="2026-06-05", top=5, hotspot_scores={"通信设备": 8.0})
+
+    assert result[0].strength_score >= 78
+    assert any("热点板块加分" in reason for reason in result[0].reasons)
+
+
 def test_parse_price_buckets_parses_non_overlapping_ranges():
     """价格分层参数应解析为不重叠区间和目标数量。"""
     buckets = parse_price_buckets("0-10:2,10-20:2,20-50:1")
