@@ -55,6 +55,24 @@ def test_normalize_stock_list_keeps_latest_price_when_available():
     assert result[1].latest_price == 7.5
 
 
+def test_normalize_stock_list_keeps_snapshot_strength_fields():
+    """全市场快照应保留涨跌幅和成交额，用于日线请求前的候选预筛。"""
+    raw = pd.DataFrame(
+        {
+            "代码": ["000001"],
+            "名称": ["平安银行"],
+            "最新价": [11.0],
+            "涨跌幅": [3.5],
+            "成交额": [123_000_000],
+        }
+    )
+
+    result = normalize_stock_list(raw)
+
+    assert result[0].change_percent == 3.5
+    assert result[0].amount == 123_000_000
+
+
 def test_filter_supported_stock_codes_keeps_six_digit_a_share_codes():
     """推荐主流程第一版只扫描常见沪深六位数字代码。"""
     stocks = normalize_stock_list(

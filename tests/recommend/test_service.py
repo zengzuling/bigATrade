@@ -118,6 +118,46 @@ def test_recommendation_service_prefilters_by_price_buckets_before_fetching_dail
     assert provider.requested_codes == ["000001"]
 
 
+def test_recommendation_service_prefilters_snapshot_candidates_per_bucket():
+    """服务层应先按快照强度缩小每个价格桶候选池，避免全量拉日线。"""
+    provider = RecordingProvider()
+    provider.list_stocks = lambda: [
+        StockInfo(code="000001", name="低价强", latest_price=8.0, change_percent=3.0, amount=100_000_000),
+        StockInfo(code="000002", name="低价弱", latest_price=7.0, change_percent=1.0, amount=10_000_000),
+        StockInfo(code="000003", name="中价强", latest_price=15.0, change_percent=4.0, amount=90_000_000),
+        StockInfo(code="000004", name="中价弱", latest_price=16.0, change_percent=0.5, amount=5_000_000),
+    ]
+    service = RecommendationService(provider=provider)
+
+    service.recommend(
+        date="2026-06-05",
+        top=10,
+        price_buckets=parse_price_buckets("0-10:1,10-20:1"),
+        prefilter_buckets=parse_price_buckets("0-10:1,10-20:1"),
+    )
+
+    assert provider.requested_codes == ["000001", "000003"]
+
+
+def test_recommendation_service_keeps_stocks_when_snapshot_price_missing():
+    """快照价缺失时应保留股票继续扫描，避免基础代码表 fallback 后被清空。"""
+    provider = RecordingProvider()
+    provider.list_stocks = lambda: [
+        StockInfo(code="000001", name="无快照价一"),
+        StockInfo(code="000002", name="无快照价二"),
+    ]
+    service = RecommendationService(provider=provider)
+
+    service.recommend(
+        date="2026-06-05",
+        top=10,
+        price_buckets=parse_price_buckets("0-10:1"),
+        prefilter_buckets=parse_price_buckets("0-10:1"),
+    )
+
+    assert provider.requested_codes == ["000001", "000002"]
+
+
 def test_recommendation_service_skips_st_before_fetching_daily_bars():
     """ST 股票应在拉行情前跳过，避免浪费 AkShare 请求。"""
     provider = RecordingProvider()

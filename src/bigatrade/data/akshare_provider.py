@@ -10,11 +10,15 @@ def normalize_stock_list(raw: pd.DataFrame) -> list[StockInfo]:
     code_column = _first_existing_column(raw, ["代码", "code"])
     name_column = _first_existing_column(raw, ["名称", "name"])
     price_column = _optional_existing_column(raw, ["最新价", "latest_price", "最新"])
+    change_column = _optional_existing_column(raw, ["涨跌幅", "change_percent"])
+    amount_column = _optional_existing_column(raw, ["成交额", "amount"])
     return [
         StockInfo(
             code=_normalize_stock_code(row[code_column]),
             name=str(row[name_column]),
             latest_price=_to_optional_float(row[price_column]) if price_column else None,
+            change_percent=_to_optional_float(row[change_column]) if change_column else None,
+            amount=_to_optional_float(row[amount_column]) if amount_column else None,
         )
         for _, row in raw.iterrows()
     ]

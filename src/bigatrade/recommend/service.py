@@ -32,6 +32,7 @@ class RecommendationDiagnostics:
     risky_name_stocks: int = 0
     daily_bar_errors: int = 0
     empty_daily_bars: int = 0
+    candidate_prefiltered_stocks: int = 0
     score_filtered_stocks: int = 0
     scored_plans: int = 0
     output_plans: int = 0
@@ -66,6 +67,7 @@ class RecommendationService:
         top: int = 30,
         scan_limit: int | None = None,
         price_buckets: list[PriceBucket] | None = None,
+        prefilter_buckets: list[PriceBucket] | None = None,
     ) -> list[TradePlan]:
         """生成指定日期的强势股推荐计划。"""
         diagnostics = RecommendationDiagnostics()
@@ -80,6 +82,9 @@ class RecommendationService:
         if price_buckets:
             stocks = _prefilter_stocks_by_price_buckets(stocks, price_buckets)
         diagnostics.price_prefiltered_stocks = len(stocks)
+        if prefilter_buckets:
+            stocks = _prefilter_snapshot_candidates_by_buckets(stocks, prefilter_buckets)
+        diagnostics.candidate_prefiltered_stocks = len(stocks)
 
         for stock in stocks:
             if is_risky_stock_name(stock.name):
@@ -189,3 +194,34 @@ def _prefilter_stocks_by_price_buckets(stocks: list[StockInfo], buckets: list[Pr
         if any(bucket.low <= stock.latest_price < bucket.high for bucket in buckets):
             prefiltered.append(stock)
     return prefiltered
+
+
+def _prefilter_snapshot_candidates_by_buckets(stocks: list[StockInfo], buckets: list[PriceBucket]) -> list[StockInfo]:
+    """按快照强度从每个价格桶挑出候选池，减少后续日线请求。"""
+    if not any(stock.latest_price is not None for stock in stocks):
+        return stocks
+
+    selected: list[StockInfo] = []
+    selected_codes: set[str] = set()
+    for bucket in buckets:
+        bucket_stocks = [
+            stock
+            for stock in stocks
+            if stock.latest_price is not None and bucket.low <= stock.latest_price < bucket.high
+        ]
+        bucket_stocks.sort(key=_snapshot_candidate_rank, reverse=True)
+        for stock in bucket_stocks[: bucket.count]:
+            if stock.code in selected_codes:
+                continue
+            selected.append(stock)
+            selected_codes.add(stock.code)
+    return selected
+
+
+def _snapshot_candidate_rank(stock: StockInfo) -> tuple[float, float, float]:
+    """用成交额、涨跌幅、最新价给快照候选排序。"""
+    return (
+        stock.amount or 0.0,
+        stock.change_percent or 0.0,
+        stock.latest_price or 0.0,
+    )

@@ -25,6 +25,14 @@ python -m bigatrade backtest --start 2025-01-01 --end 2026-06-05
 python -m bigatrade recommend --date 2026-06-05 --scan-limit 2000 --top 2000 --price-buckets "0-10:2,10-20:2,20-50:1" --output outputs/recommend_2026-06-05_bucket.csv
 ```
 
+全市场快照预筛示例：
+
+```powershell
+python -m bigatrade recommend --date 2026-06-05 --scan-limit all --top 2000 --price-buckets "0-10:2,10-20:2,20-50:1" --prefilter-per-bucket "0-10:120,10-20:120,20-50:80" --output outputs/recommend_2026-06-05_all_prefilter.csv
+```
+
+这个命令会先用 AkShare 全市场快照过滤价格桶，再按成交额和涨跌幅从每个价格桶挑候选，只对候选池拉日线。默认会把日线缓存到 `data/cache/`，后续重复跑同一日期范围会减少 AkShare 请求。
+
 ## 验证
 
 ```powershell

@@ -10,3 +10,5 @@ class StockInfo:
     code: str
     name: str
     latest_price: float | None = None
+    change_percent: float | None = None
+    amount: float | None = None
