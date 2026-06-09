@@ -4,6 +4,8 @@ from typer.testing import CliRunner
 
 from bigatrade import cli
 from bigatrade.hotspot.service import HotspotVersion
+from bigatrade.recommend.service import RecommendationDiagnostics
+from bigatrade.results.service import DailyReviewRow, FiveDaySummary
 from bigatrade.tracking.performance import TrackingResult
 from bigatrade.strategy.trade_plan import build_trade_plan
 
@@ -23,6 +25,7 @@ class FakeRecommendationService:
 
     def __init__(self):
         self.last_kwargs = {}
+        self.last_diagnostics = RecommendationDiagnostics()
 
     def recommend(
         self,
@@ -195,6 +198,136 @@ def test_resolve_track_date_uses_previous_trade_day_before_market_close(monkeypa
     )
 
     assert cli._resolve_track_date("today") == "2026-06-05"
+
+
+class FakeRecommendationRepository:
+    """测试用推荐入库仓储。"""
+
+    def __init__(self):
+        self.saved_plans = []
+
+    def save_successful_run(self, **kwargs):
+        self.saved_plans = kwargs["plans"]
+        return 12
+
+
+def test_daily_run_tracks_then_recommends_and_saves(monkeypatch, tmp_path):
+    """daily-run 应先跟踪旧推荐，再生成当天推荐并写入推荐表。"""
+    fake_tracker = FakePerformanceTracker()
+    fake_recommendation_service = FakeRecommendationService()
+    fake_hotspot_service = FakeHotspotService()
+    fake_repository = FakeRecommendationRepository()
+    output_path = tmp_path / "recommend.csv"
+
+    monkeypatch.setattr(cli, "_resolve_track_date", lambda value: "2026-06-09")
+    monkeypatch.setattr(cli, "create_performance_tracker", lambda **kwargs: fake_tracker)
+    monkeypatch.setattr(cli, "create_recommendation_service", lambda **kwargs: fake_recommendation_service)
+    monkeypatch.setattr(cli, "create_hotspot_service", lambda **kwargs: fake_hotspot_service)
+    monkeypatch.setattr(cli, "create_recommendation_repository", lambda **kwargs: fake_repository)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        [
+            "daily-run",
+            "--date",
+            "today",
+            "--db-host",
+            "127.0.0.1",
+            "--db-user",
+            "u",
+            "--db-password",
+            "p",
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert fake_tracker.tracked_date == "2026-06-09"
+    assert fake_hotspot_service.called is True
+    assert len(fake_repository.saved_plans) == 1
+    assert "daily tracking: date=2026-06-09" in result.output
+    assert "daily recommendation: date=2026-06-09, run_id=12" in result.output
+
+
+class FakeResultRepository:
+    """测试用结果仓储。"""
+
+    def __init__(self):
+        self.settled = False
+
+    def list_settlement_candidates(self, as_of_date: str):
+        return []
+
+    def list_quotes(self, recommendation_id: int):
+        return []
+
+    def save_backtest_results(self, results):
+        self.settled = True
+        return len(results)
+
+    def list_daily_review_rows(self, trade_date: str):
+        return [
+            DailyReviewRow(
+                stock_code="600000",
+                stock_name="测试股",
+                close_price=10.5,
+                change_pct=5.0,
+                gain_from_recommend_pct=5.0,
+                amount=100000000,
+                hit_target=False,
+                hit_stop_loss=False,
+                recommend_reason="站上均线",
+                risk_tip="跌破止损退出",
+            )
+        ]
+
+    def load_five_day_summary(self, as_of_date: str):
+        return FiveDaySummary(
+            result_count=1,
+            hit_target_count=0,
+            positive_count=1,
+            average_return_pct=5.0,
+            worst_return_pct=5.0,
+            best_return_pct=5.0,
+        )
+
+
+def test_settle_results_command_uses_result_repository(monkeypatch):
+    """settle-results 命令应输出结算统计。"""
+    monkeypatch.setattr(cli, "_resolve_track_date", lambda value: "2026-06-09")
+    monkeypatch.setattr(cli, "create_result_repository", lambda **kwargs: FakeResultRepository())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app,
+        ["settle-results", "--date", "today", "--db-host", "127.0.0.1", "--db-user", "u", "--db-password", "p"],
+    )
+
+    assert result.exit_code == 0
+    assert "settled results: date=2026-06-09" in result.output
+
+
+def test_summary_and_review_commands_render_outputs(monkeypatch):
+    """summary 和 review 命令应从结果仓储读取数据并渲染文本。"""
+    monkeypatch.setattr(cli, "_resolve_track_date", lambda value: "2026-06-09")
+    monkeypatch.setattr(cli, "create_result_repository", lambda **kwargs: FakeResultRepository())
+    runner = CliRunner()
+
+    summary_result = runner.invoke(
+        cli.app,
+        ["five-day-summary", "--date", "today", "--db-host", "127.0.0.1", "--db-user", "u", "--db-password", "p"],
+    )
+    review_result = runner.invoke(
+        cli.app,
+        ["review", "--date", "today", "--db-host", "127.0.0.1", "--db-user", "u", "--db-password", "p"],
+    )
+
+    assert summary_result.exit_code == 0
+    assert "已结算 1 条推荐" in summary_result.output
+    assert review_result.exit_code == 0
+    assert "测试股" in review_result.output
 
 
 def test_resolve_track_date_uses_today_after_market_close(monkeypatch):

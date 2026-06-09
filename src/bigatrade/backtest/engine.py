@@ -22,6 +22,7 @@ class BacktestResult:
     hit_target: bool
     return_pct: float
     exit_reason: str
+    holding_days: int | None
 
 
 def backtest_trade_plan(plan: TradePlan, future_bars: pd.DataFrame) -> BacktestResult:
@@ -35,10 +36,11 @@ def backtest_trade_plan(plan: TradePlan, future_bars: pd.DataFrame) -> BacktestR
     scanned = holding_bars.loc[entry_index:].head(plan.max_holding_days).reset_index(drop=True)
     highest_gain_pct = _highest_gain_pct(plan.buy_price, scanned)
 
-    for _, row in scanned.iterrows():
+    for holding_index, row in scanned.iterrows():
         current_date = str(row["date"])
         hit_stop = row["low"] <= plan.stop_loss_price
         hit_target = row["high"] >= plan.target_price
+        holding_days = int(holding_index) + 1
 
         # 同日同时触发时采用保守假设，先按止损退出。
         if hit_stop:
@@ -50,6 +52,7 @@ def backtest_trade_plan(plan: TradePlan, future_bars: pd.DataFrame) -> BacktestR
                 highest_gain_pct=highest_gain_pct,
                 hit_target=False,
                 exit_reason="止损",
+                holding_days=holding_days,
             )
         if hit_target:
             return _exit_result(
@@ -60,6 +63,7 @@ def backtest_trade_plan(plan: TradePlan, future_bars: pd.DataFrame) -> BacktestR
                 highest_gain_pct=highest_gain_pct,
                 hit_target=True,
                 exit_reason="止盈",
+                holding_days=holding_days,
             )
 
     last = scanned.iloc[-1]
@@ -71,6 +75,7 @@ def backtest_trade_plan(plan: TradePlan, future_bars: pd.DataFrame) -> BacktestR
         highest_gain_pct=highest_gain_pct,
         hit_target=False,
         exit_reason="到期",
+        holding_days=len(scanned),
     )
 
 
@@ -97,6 +102,7 @@ def _exit_result(
     highest_gain_pct: float,
     hit_target: bool,
     exit_reason: str,
+    holding_days: int,
 ) -> BacktestResult:
     """构造已触发买入后的退出结果。"""
     return BacktestResult(
@@ -111,6 +117,7 @@ def _exit_result(
         hit_target=hit_target,
         return_pct=round((exit_price / plan.buy_price - 1) * 100, 1),
         exit_reason=exit_reason,
+        holding_days=holding_days,
     )
 
 
@@ -128,4 +135,5 @@ def _no_entry_result(plan: TradePlan, bars: pd.DataFrame) -> BacktestResult:
         hit_target=False,
         return_pct=0.0,
         exit_reason="未触发买入",
+        holding_days=None,
     )

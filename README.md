@@ -41,6 +41,24 @@ python -m bigatrade recommend --date 2026-06-05 --scan-limit all --top 2000 --pr
 
 该命令会在推荐前先生成一版市场热点，写入 `market_hotspot_versions` 和 `market_hotspot_boards`，再把命中行业热点的股票加入强势评分。命中热点时，推荐原因会出现“热点板块加分”。
 
+收盘后自动流水线示例：
+
+```powershell
+python -m bigatrade daily-run --date today --scan-limit all --top 30 --price-buckets "0-10:2,10-20:2,20-50:1" --prefilter-per-bucket "0-10:120,10-20:120,20-50:80" --db-host 47.110.235.19 --db-port 33066 --db-user zzl --db-password "Abc@123456"
+```
+
+该命令会先跟踪旧推荐在当日的收盘表现，再刷新市场热点，生成当天推荐 CSV，并把推荐批次和推荐明细写入 MySQL。
+
+每日结果结算和复盘示例：
+
+```powershell
+python -m bigatrade settle-results --date today --db-host 47.110.235.19 --db-port 33066 --db-user zzl --db-password "Abc@123456"
+python -m bigatrade five-day-summary --date today --db-host 47.110.235.19 --db-port 33066 --db-user zzl --db-password "Abc@123456"
+python -m bigatrade review --date today --db-host 47.110.235.19 --db-port 33066 --db-user zzl --db-password "Abc@123456"
+```
+
+`settle-results` 会把满足目标、触发止损或观察满 5 个交易日的推荐写入 `backtest_results`。`five-day-summary` 输出已结算推荐的命中率和收益统计。`review` 基于 `stock_recommendation_daily_quotes` 生成公众号复盘初稿。
+
 ## 验证
 
 ```powershell
