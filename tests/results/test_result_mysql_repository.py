@@ -21,6 +21,9 @@ class FakeCursor:
     def fetchall(self):
         return []
 
+    def fetchone(self):
+        return (0, 0, 0, 0, 0, 0)
+
 
 class FakeConnection:
     """模拟 MySQL 连接上下文。"""
@@ -55,3 +58,21 @@ def test_list_settlement_candidates_includes_existing_backtest_results(monkeypat
     assert "br.id IS NULL" not in cursor.executed_sql
     assert "stock_recommendation_daily_quotes" in cursor.executed_sql
     assert cursor.executed_params == ("2026-06-09", "2026-06-09")
+
+
+def test_load_five_day_summary_uses_snapshot_date(monkeypatch):
+    """5 日总结应按当天快照统计，不能把历史快照重复累计。"""
+    cursor = FakeCursor()
+    repository = MySqlResultRepository(
+        host="127.0.0.1",
+        port=3306,
+        user="root",
+        password="secret",
+    )
+    monkeypatch.setattr(repository, "_connect", lambda: FakeConnection(cursor))
+
+    repository.load_five_day_summary("2026-06-09")
+
+    assert "WHERE exit_date = %s" in cursor.executed_sql
+    assert "WHERE recommend_date <= %s" not in cursor.executed_sql
+    assert cursor.executed_params == ("2026-06-09",)

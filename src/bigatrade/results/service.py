@@ -128,7 +128,7 @@ class SettlementService:
             quotes = [
                 quote
                 for quote in self._repository.list_quotes(candidate.recommendation_id)
-                if quote.trade_date > candidate.recommend_date
+                if candidate.recommend_date < quote.trade_date <= as_of_date
             ]
             if not quotes:
                 skipped_count += 1

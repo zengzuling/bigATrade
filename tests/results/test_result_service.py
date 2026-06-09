@@ -121,6 +121,19 @@ def test_settlement_service_saves_floating_result_before_final_exit():
     assert saved.result.holding_days == 1
 
 
+def test_settlement_service_ignores_quotes_after_as_of_date():
+    """重跑历史日期时，不应把后续交易日行情写入历史快照。"""
+    repository = FakeResultRepository()
+    service = SettlementService(repository)
+
+    result = service.settle("2026-06-08")
+
+    assert result.settled_count == 1
+    saved = repository.saved_results[0]
+    assert saved.result.exit_date == "2026-06-08"
+    assert saved.result.exit_reason == "观察中"
+
+
 def test_render_review_outputs_wechat_sections():
     """复盘文案应输出标题、海报、今日复盘和明日计划。"""
     content = render_review(

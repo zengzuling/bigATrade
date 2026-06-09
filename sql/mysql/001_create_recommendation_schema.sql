@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS `backtest_results` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_backtest_results_recommendation` (`recommendation_id`),
+  UNIQUE KEY `uk_backtest_results_recommendation_exit` (`recommendation_id`, `exit_date`),
   KEY `idx_backtest_results_run` (`run_id`),
   KEY `idx_backtest_results_date` (`recommend_date`),
   KEY `idx_backtest_results_code` (`stock_code`),

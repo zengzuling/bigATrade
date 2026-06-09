@@ -75,7 +75,7 @@ class MySqlResultRepository:
         return [_quote_from_row(row) for row in rows]
 
     def save_backtest_results(self, results: list[SettledBacktestResult]) -> int:
-        """保存回测结算结果；重复结算时更新原记录。"""
+        """保存每日回测快照；同一推荐同一天重复结算时更新原记录。"""
         if not results:
             return 0
         sql = """
@@ -130,7 +130,7 @@ class MySqlResultRepository:
         return [_review_row_from_row(row) for row in rows]
 
     def load_five_day_summary(self, as_of_date: str) -> FiveDaySummary:
-        """读取截至指定日期已结算推荐的整体表现。"""
+        """读取指定日期的 5 日观察快照汇总。"""
         sql = """
             SELECT
                 COUNT(*),
@@ -140,7 +140,7 @@ class MySqlResultRepository:
                 COALESCE(MIN(return_pct), 0),
                 COALESCE(MAX(return_pct), 0)
             FROM backtest_results
-            WHERE recommend_date <= %s
+            WHERE exit_date = %s
         """
         with self._connect() as conn:
             with conn.cursor() as cur:
