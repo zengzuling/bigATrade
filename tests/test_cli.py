@@ -325,7 +325,7 @@ def test_summary_and_review_commands_render_outputs(monkeypatch):
     )
 
     assert summary_result.exit_code == 0
-    assert "已结算 1 条推荐" in summary_result.output
+    assert "已跟踪 1 条推荐" in summary_result.output
     assert review_result.exit_code == 0
     assert "测试股" in review_result.output
 

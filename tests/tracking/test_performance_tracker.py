@@ -47,6 +47,13 @@ class FakeRepository:
         return len(quotes)
 
 
+class FailingProvider:
+    """测试用失败行情源。"""
+
+    def daily_bars(self, code: str, start_date: str, end_date: str):
+        raise RuntimeError("network failed")
+
+
 def test_tracker_saves_daily_quote_with_gain_and_target_flags():
     """跟踪服务应计算当日涨跌幅、相对买入价涨幅，并记录是否达到目标价。"""
     repository = FakeRepository()
@@ -64,3 +71,16 @@ def test_tracker_saves_daily_quote_with_gain_and_target_flags():
     assert quote.gain_from_recommend_pct == 12.0
     assert quote.hit_target is True
     assert quote.hit_stop_loss is False
+
+
+def test_tracker_skips_failed_stock_without_aborting_batch():
+    """单只股票行情失败时应计入跳过，不中断整个跟踪批次。"""
+    repository = FakeRepository()
+    tracker = PerformanceTracker(provider=FailingProvider(), repository=repository)
+
+    result = tracker.track("2026-06-08")
+
+    assert result.candidate_count == 1
+    assert result.tracked_count == 0
+    assert result.skipped_count == 1
+    assert repository.saved_quotes == []

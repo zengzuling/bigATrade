@@ -33,7 +33,7 @@ class MySqlResultRepository:
         }
 
     def list_settlement_candidates(self, as_of_date: str) -> list[RecommendationForSettlement]:
-        """查询尚未结算且可能满足退出条件的推荐股票。"""
+        """查询观察期内所有推荐股票，已写过结果的也允许按当天更新。"""
         sql = """
             SELECT
                 sr.id, sr.run_id, sr.recommend_date, sr.stock_code, sr.stock_name,
@@ -42,14 +42,18 @@ class MySqlResultRepository:
                 sr.max_holding_days, sr.strength_score,
                 COALESCE(sr.recommend_reason, ''), COALESCE(sr.risk_tip, '')
             FROM stock_recommendations sr
-            LEFT JOIN backtest_results br ON br.recommendation_id = sr.id
-            WHERE br.id IS NULL
-              AND sr.recommend_date < %s
+            WHERE sr.recommend_date < %s
+              AND (
+                  SELECT COUNT(*)
+                  FROM stock_recommendation_daily_quotes q
+                  WHERE q.recommendation_id = sr.id
+                    AND q.trade_date <= %s
+              ) <= sr.max_holding_days
             ORDER BY sr.recommend_date, sr.rank_no, sr.id
         """
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute(sql, (as_of_date,))
+                cur.execute(sql, (as_of_date, as_of_date))
                 rows = cur.fetchall()
         return [_recommendation_from_row(row) for row in rows]
 

@@ -70,6 +70,26 @@ class FakeResultRepository:
         return len(results)
 
 
+class FakeFloatingResultRepository(FakeResultRepository):
+    """测试观察期未结束时也写入当前结果。"""
+
+    def list_quotes(self, recommendation_id: int):
+        return [
+            QuoteForSettlement(
+                trade_date="2026-06-08",
+                open_price=10.0,
+                high_price=10.5,
+                low_price=9.95,
+                close_price=10.3,
+                change_pct=3.0,
+                gain_from_recommend_pct=3.0,
+                amount=10000000,
+                hit_target=False,
+                hit_stop_loss=False,
+            )
+        ]
+
+
 def test_settlement_service_saves_target_hit_result():
     """结算服务应把已命中目标的每日表现转换为回测结果。"""
     repository = FakeResultRepository()
@@ -83,6 +103,22 @@ def test_settlement_service_saves_target_hit_result():
     assert saved.recommendation_id == 1
     assert saved.result.exit_reason == "止盈"
     assert saved.result.holding_days == 2
+
+
+def test_settlement_service_saves_floating_result_before_final_exit():
+    """未触发止盈止损且未满 5 日时，也应写入当前观察结果。"""
+    repository = FakeFloatingResultRepository()
+    service = SettlementService(repository)
+
+    result = service.settle("2026-06-08")
+
+    assert result.candidate_count == 1
+    assert result.settled_count == 1
+    assert result.skipped_count == 0
+    saved = repository.saved_results[0]
+    assert saved.result.exit_reason == "观察中"
+    assert saved.result.exit_date == "2026-06-08"
+    assert saved.result.holding_days == 1
 
 
 def test_render_review_outputs_wechat_sections():
@@ -126,6 +162,6 @@ def test_render_five_day_summary_formats_core_metrics():
         ),
     )
 
-    assert "已结算 4 条推荐" in content
+    assert "已跟踪 4 条推荐" in content
     assert "命中率 25.00%" in content
     assert "平均收益 2.50%" in content

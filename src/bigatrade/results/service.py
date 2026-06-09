@@ -5,7 +5,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from bigatrade.backtest.engine import BacktestResult, backtest_trade_plan
+from bigatrade.backtest.engine import BacktestResult
 from bigatrade.strategy.trade_plan import TradePlan
 
 
@@ -113,13 +113,13 @@ class ResultRepository(Protocol):
 
 
 class SettlementService:
-    """把每日跟踪表现沉淀为可复核的回测结算结果。"""
+    """把每日跟踪表现沉淀为可复核的每日回测快照。"""
 
     def __init__(self, repository: ResultRepository) -> None:
         self._repository = repository
 
     def settle(self, as_of_date: str) -> SettlementResult:
-        """结算截至指定日期已经满足退出条件或观察期结束的推荐。"""
+        """结算截至指定日期的所有已跟踪推荐，未最终退出的写入当前结果。"""
         candidates = self._repository.list_settlement_candidates(as_of_date)
         results: list[SettledBacktestResult] = []
         skipped_count = 0
@@ -131,9 +131,6 @@ class SettlementService:
                 if quote.trade_date > candidate.recommend_date
             ]
             if not quotes:
-                skipped_count += 1
-                continue
-            if not _is_ready_to_settle(candidate, quotes):
                 skipped_count += 1
                 continue
             results.append(_settle_one(candidate, quotes))
@@ -192,11 +189,11 @@ def render_review(trade_date: str, rows: list[DailyReviewRow]) -> str:
 def render_five_day_summary(as_of_date: str, summary: FiveDaySummary) -> str:
     """格式化 5 日结果总结。"""
     if summary.result_count == 0:
-        return f"截至 {as_of_date} 暂无已结算的 5 日结果。"
+        return f"截至 {as_of_date} 暂无已跟踪的 5 日结果。"
     hit_rate = summary.hit_target_count / summary.result_count * 100
     positive_rate = summary.positive_count / summary.result_count * 100
     return (
-        f"截至 {as_of_date}，已结算 {summary.result_count} 条推荐；"
+        f"截至 {as_of_date}，已跟踪 {summary.result_count} 条推荐；"
         f"10% 目标命中 {summary.hit_target_count} 条，命中率 {hit_rate:.2f}%；"
         f"正收益 {summary.positive_count} 条，占比 {positive_rate:.2f}%；"
         f"平均收益 {summary.average_return_pct:.2f}%，"
@@ -204,20 +201,11 @@ def render_five_day_summary(as_of_date: str, summary: FiveDaySummary) -> str:
     )
 
 
-def _is_ready_to_settle(candidate: RecommendationForSettlement, quotes: list[QuoteForSettlement]) -> bool:
-    """判断推荐是否已经满足结算条件。"""
-    return (
-        len(quotes) >= candidate.max_holding_days
-        or any(quote.hit_target for quote in quotes)
-        or any(quote.hit_stop_loss for quote in quotes)
-    )
-
-
 def _settle_one(
     candidate: RecommendationForSettlement,
     quotes: list[QuoteForSettlement],
 ) -> SettledBacktestResult:
-    """结算单条推荐的 5 日表现。"""
+    """结算单条推荐截至当天的 5 日观察快照。"""
     plan = TradePlan(
         recommend_date=candidate.recommend_date,
         code=candidate.stock_code,
@@ -248,8 +236,75 @@ def _settle_one(
     return SettledBacktestResult(
         recommendation_id=candidate.recommendation_id,
         run_id=candidate.run_id,
-        result=backtest_trade_plan(plan, frame),
+        result=_as_of_result(plan, frame),
     )
+
+
+def _as_of_result(plan: TradePlan, frame: pd.DataFrame) -> BacktestResult:
+    """构造截至最新交易日的当前结果，保证每只推荐股每天都有回测记录。"""
+    holding_bars = frame.head(plan.max_holding_days).reset_index(drop=True)
+    entry_index = _find_entry_index(plan, holding_bars)
+    if entry_index is None:
+        latest = holding_bars.iloc[-1]
+        return BacktestResult(
+            code=plan.code,
+            name=plan.name,
+            recommend_date=plan.recommend_date,
+            entry_date=None,
+            exit_date=str(latest["date"]),
+            entry_price=None,
+            exit_price=None,
+            highest_gain_pct=_highest_gain_pct(plan.buy_price, holding_bars),
+            hit_target=False,
+            return_pct=0.0,
+            exit_reason="未触发买入",
+            holding_days=None,
+        )
+
+    scanned = holding_bars.loc[entry_index:].reset_index(drop=True)
+    latest = scanned.iloc[-1]
+    latest_close = float(latest["close"])
+    hit_target = bool((scanned["high"] >= plan.target_price).any())
+    hit_stop_loss = bool((scanned["low"] <= plan.stop_loss_price).any())
+    exit_reason = _as_of_exit_reason(hit_target=hit_target, hit_stop_loss=hit_stop_loss)
+    return BacktestResult(
+        code=plan.code,
+        name=plan.name,
+        recommend_date=plan.recommend_date,
+        entry_date=str(scanned.iloc[0]["date"]),
+        exit_date=str(latest["date"]),
+        entry_price=plan.buy_price,
+        exit_price=round(latest_close, 2),
+        highest_gain_pct=_highest_gain_pct(plan.buy_price, scanned),
+        hit_target=hit_target,
+        return_pct=round((latest_close / plan.buy_price - 1) * 100, 1),
+        exit_reason=exit_reason,
+        holding_days=len(scanned),
+    )
+
+
+def _as_of_exit_reason(hit_target: bool, hit_stop_loss: bool) -> str:
+    """根据观察期累计触发情况给当前快照打状态。"""
+    if hit_target:
+        return "止盈"
+    if hit_stop_loss:
+        return "止损"
+    return "观察中"
+
+
+def _find_entry_index(plan: TradePlan, frame: pd.DataFrame) -> int | None:
+    """查找观察期内第一个触发买入区间的交易日。"""
+    for index, row in frame.iterrows():
+        if row["low"] <= plan.buy_high and row["high"] >= plan.buy_low:
+            return int(index)
+    return None
+
+
+def _highest_gain_pct(entry_price: float, frame: pd.DataFrame) -> float:
+    """计算当前观察期内的最高浮盈。"""
+    if frame.empty:
+        return 0.0
+    return round((float(frame["high"].max()) / entry_price - 1) * 100, 1)
 
 
 def _format_pct(value: float | None) -> str:

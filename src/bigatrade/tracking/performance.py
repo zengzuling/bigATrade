@@ -88,11 +88,15 @@ class PerformanceTracker:
         skipped_count = 0
 
         for recommendation in recommendations:
-            bars = self._provider.daily_bars(
-                recommendation.stock_code,
-                recommendation.recommend_date,
-                trade_date,
-            )
+            try:
+                bars = self._provider.daily_bars(
+                    recommendation.stock_code,
+                    recommendation.recommend_date,
+                    trade_date,
+                )
+            except Exception:
+                skipped_count += 1
+                continue
             quote = _build_daily_quote(recommendation, bars, trade_date)
             if quote is None:
                 skipped_count += 1
